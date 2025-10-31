@@ -1,0 +1,54 @@
+.product-detail-image {
+    width: 100%;
+    height: 400px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.product-thumbnails {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 1rem;
+}
+
+.product-thumbnail {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.product-thumbnail.active {
+    border-color: #28a745;
+}
+
+.farmer-card {
+    border-radius: 8px;
+    border: 1px solid #eee;
+    margin-bottom: 1rem;
+}
+
+.farmer-card .card-title {
+    color: #28a745;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+}
+
+.farmer-info-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.farmer-info-item i {
+    margin-right: 0.5rem;
+    color: #28a745;
+}
+
+.quantity-control {
+    max-width: 200px;
+}

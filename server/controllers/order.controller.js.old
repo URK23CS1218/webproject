@@ -1,0 +1,440 @@
+﻿const Order = require("../models/Order.model");
+const Product = require("../models/Product.model");
+const mongoose = require("mongoose");
+const { validationResult } = require("express-validator");
+
+// Ensure MongoDB is connected
+const ensureConnection = async () => {
+  if (mongoose.connection.readyState !== 1) {
+    console.log('⚠️ MongoDB not connected, attempting to connect...');
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      dbName: 'agrolink'
+    });
+  }
+  console.log('✅ MongoDB connection verified');
+};
+
+const orderController = {
+  createOrder: async (req, res) => {
+    let session;
+    try {
+      // Ensure database is connected
+      await ensureConnection();
+      
+      console.log('📦 Starting order creation...');
+      
+      // First validate request
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        console.log('❌ Validation failed:', errors.array());
+        return res.status(400).json({
+          message: "Validation failed",
+          errors: errors.array()
+        });
+      }
+
+      const { items, deliveryAddress } = req.body;
+      
+      // Log request details
+      console.log('📥 createOrder request details:', {
+        items: items?.length || 0,
+        hasDeliveryAddress: !!deliveryAddress,
+        userId: req.user?._id?.toString() || req.user?.id || null,
+      });
+
+      // Validate basic requirements
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        console.log('❌ Invalid items array');
+        return res.status(400).json({ message: "Items array is required and must not be empty" });
+      }
+
+      if (!deliveryAddress || deliveryAddress.trim().length < 10) {
+        console.log('❌ Invalid delivery address');
+        return res.status(400).json({ message: "Delivery address must be at least 10 characters long" });
+      }
+
+      if (!req.user || !req.user.id) {
+        console.log('❌ No authenticated user found');
+        return res.status(401).json({ message: "User authentication required" });
+      }
+
+      // Start transaction
+      session = await mongoose.startSession();
+      await session.startTransaction();
+      console.log('✅ Transaction started');
+
+      // Get user ID (support both formats)
+      const consumerId = req.user?.id || req.user?._id;
+      
+      // Get product details and validate
+      const productIds = items.map(item => item.product);
+      console.log('🔍 Fetching products:', productIds);
+      
+      const products = await Product.find({ _id: { $in: productIds } })
+        .populate('farmer', 'name email')
+        .session(session);
+      
+      if (products.length !== productIds.length) {
+        console.log('❌ Some products not found');
+        await session.abortTransaction();
+        return res.status(404).json({ 
+          message: "Some products not found",
+          found: products.length,
+          requested: productIds.length
+        });
+      }
+
+      const productMap = products.reduce((map, product) => {
+        map[product._id.toString()] = product;
+        return map;
+      }, {});
+
+      let subtotal = 0;
+      const orderItems = [];
+      let farmerId = null;
+
+      for (const product of products) {
+        if (!farmerId) {
+          farmerId = product.farmer;
+        } else if (farmerId.toString() !== product.farmer.toString()) {
+          await session.abortTransaction();
+          return res.status(400).json({ message: "All items must be from the same farmer" });
+        }
+      }
+
+      for (const item of items) {
+        const product = productMap[item.product.toString()];
+        
+        if (!product) {
+          await session.abortTransaction();
+          return res.status(404).json({ message: `Product not found: ${item.product}` });
+        }
+
+        if (product.quantityAvailable < item.qty) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            message: `Insufficient quantity for ${product.title}. Available: ${product.quantityAvailable}`
+          });
+        }
+
+        if (product.minOrderQty > item.qty) {
+          await session.abortTransaction();
+          return res.status(400).json({
+            message: `Minimum order quantity for ${product.title} is ${product.minOrderQty}`
+          });
+        }
+
+        const itemTotal = product.pricePerUnit * item.qty;
+        subtotal += itemTotal;
+
+        orderItems.push({
+          product: product._id,
+          title: product.title,
+          qty: item.qty,
+          unitPrice: product.pricePerUnit,
+          measuringUnit: product.measuringUnit
+        });
+
+        product.quantityAvailable -= item.qty;
+        await product.save({ session });
+      }
+
+      if (!farmerId) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: "Could not determine farmer for the order" });
+      }
+
+      const order = new Order({
+        consumer: consumerId,
+        farmer: farmerId,
+        items: orderItems,
+        subtotal,
+        deliveryAddress: deliveryAddress.trim(),
+        status: "placed"
+      });
+
+      console.log('💾 Saving order...', {
+        consumerId: order.consumer,
+        farmerId: order.farmer,
+        itemCount: orderItems.length,
+        total: subtotal
+      });
+
+      const savedOrder = await order.save({ session });
+      
+      // Double-check everything saved correctly
+      const verifiedOrder = await Order.findById(savedOrder._id)
+        .session(session);
+        
+      if (!verifiedOrder) {
+        throw new Error("Order failed to save properly");
+      }
+
+      await session.commitTransaction();
+      console.log('✅ Transaction committed successfully');
+
+      // Now populate the order with all required details
+      const populatedOrder = await Order.findById(savedOrder._id)
+        .populate("consumer", "name email phone")
+        .populate("farmer", "name email phone")
+        .populate("items.product", "title images pricePerUnit measuringUnit");
+
+      if (!populatedOrder) {
+        throw new Error("Failed to retrieve saved order");
+      }
+
+      console.log('✅ Order created successfully:', {
+        orderId: populatedOrder._id,
+        consumerId: populatedOrder.consumer._id,
+        farmerId: populatedOrder.farmer._id,
+        itemCount: populatedOrder.items.length,
+        total: populatedOrder.subtotal
+      });
+
+      res.status(201).json({
+        message: "Order placed successfully",
+        order: populatedOrder
+      });
+      });
+
+    } catch (error) {
+      console.error('❌ Order creation error:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+
+      if (session) {
+        try {
+          await session.abortTransaction();
+          console.log('✅ Transaction aborted successfully');
+        } catch (abortError) {
+          console.error('❌ Error aborting transaction:', abortError);
+        }
+      }
+
+      // Send appropriate error response
+      if (error.name === 'ValidationError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: Object.values(error.errors).map(err => err.message)
+        });
+      } else if (error.name === 'MongoServerError' && error.code === 11000) {
+        return res.status(400).json({ message: "Duplicate order detected" });
+      } else if (error.message === "Failed to retrieve saved order") {
+        return res.status(500).json({ 
+          message: "Order created but failed to retrieve details",
+          orderId: savedOrder?._id
+        });
+      } else {
+        const payload = {
+          message: "Server error creating order",
+          error: error.message
+        };
+        if (process.env.NODE_ENV !== 'production') {
+          payload.stack = error.stack;
+        }
+        return res.status(500).json(payload);
+      }
+    } finally {
+      if (session) {
+        try {
+          await session.endSession();
+          console.log('✅ Session ended successfully');
+        } catch (endError) {
+          console.error('❌ Error ending session:', endError);
+        }
+      }
+    }
+  },
+
+  getConsumerOrders: async (req, res) => {
+    try {
+      await ensureConnection();
+
+      console.log('📥 Fetching consumer orders:', {
+        consumerId: req.user?.id || req.user?._id
+      });
+
+      const orders = await Order.find({ consumer: req.user.id })
+        .populate("farmer", "name email phone address")
+        .populate("items.product", "title images pricePerUnit measuringUnit")
+        .sort({ createdAt: -1 });
+
+      console.log('✅ Found consumer orders:', {
+        count: orders.length,
+        userId: req.user?.id
+      });
+
+      res.json(orders);
+    } catch (error) {
+      console.error('❌ Error fetching consumer orders:', {
+        error: error.message,
+        userId: req.user?.id,
+        stack: error.stack
+      });
+
+      res.status(500).json({ 
+        message: "Server error fetching orders",
+        error: error.message 
+      });
+    }
+  },
+
+  getFarmerOrders: async (req, res) => {
+    try {
+      await ensureConnection();
+
+      console.log('📥 Fetching farmer orders:', {
+        farmerId: req.user?.id || req.user?._id
+      });
+
+      const orders = await Order.find({ farmer: req.user.id })
+        .populate("consumer", "name email phone address")
+        .populate("items.product", "title images pricePerUnit measuringUnit")
+        .sort({ createdAt: -1 });
+
+      console.log('✅ Found farmer orders:', {
+        count: orders.length,
+        userId: req.user?.id
+      });
+
+      res.json(orders);
+    } catch (error) {
+      console.error('❌ Error fetching farmer orders:', {
+        error: error.message,
+        userId: req.user?.id,
+        stack: error.stack
+      });
+
+      res.status(500).json({ 
+        message: "Server error fetching orders",
+        error: error.message 
+      });
+    }
+  },
+
+  getOrder: async (req, res) => {
+    try {
+      await ensureConnection();
+
+      console.log('📥 Fetching order details:', {
+        orderId: req.params.id,
+        requestedBy: req.user?.id
+      });
+
+      const order = await Order.findById(req.params.id)
+        .populate("consumer", "name email phone address")
+        .populate("farmer", "name email phone address")
+        .populate("items.product", "title images pricePerUnit measuringUnit");
+
+      if (!order) {
+        console.log('❌ Order not found:', req.params.id);
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (order.consumer.toString() !== req.user.id &&
+          order.farmer.toString() !== req.user.id) {
+        console.log('❌ Unauthorized order access attempt:', {
+          orderId: req.params.id,
+          attemptedBy: req.user.id,
+          orderConsumer: order.consumer,
+          orderFarmer: order.farmer
+        });
+        return res.status(403).json({ message: "Not authorized to view this order" });
+      }
+
+      console.log('✅ Order details retrieved:', {
+        orderId: order._id,
+        status: order.status,
+        itemCount: order.items.length
+      });
+
+      res.json(order);
+    } catch (error) {
+      console.error('❌ Error fetching order details:', {
+        error: error.message,
+        orderId: req.params.id,
+        stack: error.stack
+      });
+
+      res.status(500).json({ 
+        message: "Server error fetching order",
+        error: error.message
+      });
+    }
+  },
+
+  updateOrderStatus: async (req, res) => {
+    try {
+      await ensureConnection();
+      
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      console.log('📥 Updating order status:', {
+        orderId: id,
+        newStatus: status,
+        userId: req.user?.id
+      });
+      
+      const validStatuses = ["placed", "accepted", "packed", "dispatched", "delivered", "cancelled"];
+      if (!validStatuses.includes(status)) {
+        console.log('❌ Invalid status attempted:', status);
+        return res.status(400).json({
+          message: "Invalid status",
+          validStatuses
+        });
+      }
+
+      const order = await Order.findById(id);
+      if (!order) {
+        console.log('❌ Order not found:', id);
+        return res.status(404).json({ message: "Order not found" });
+      }
+
+      if (order.farmer.toString() !== req.user.id) {
+        console.log('❌ Unauthorized status update attempt:', {
+          orderId: id,
+          attemptedBy: req.user.id,
+          orderFarmer: order.farmer
+        });
+        return res.status(403).json({ message: "Not authorized to update this order" });
+      }
+
+      const oldStatus = order.status;
+      order.status = status;
+      await order.save();
+
+      await order.populate("consumer", "name email phone");
+      await order.populate("farmer", "name email phone");
+      await order.populate("items.product");
+
+      console.log('✅ Order status updated:', {
+        orderId: order._id,
+        oldStatus,
+        newStatus: status,
+        updatedBy: req.user.id
+      });
+
+      res.json({
+        message: "Order status updated successfully",
+        order
+      });
+    } catch (error) {
+      console.error('❌ Error updating order status:', {
+        error: error.message,
+        orderId: req.params.id,
+        stack: error.stack
+      });
+
+      res.status(500).json({ 
+        message: "Server error updating order status",
+        error: error.message
+      });
+    }
+  }
+};
+
+module.exports = orderController;

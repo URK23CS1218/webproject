@@ -1,0 +1,36 @@
+.farmer-info {
+    margin-top: 1rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #eee;
+}
+
+.farmer-info small {
+    margin-bottom: 0.25rem;
+    color: #666 !important;
+}
+
+.farmer-info i {
+    margin-right: 0.5rem;
+    color: #28a745;
+}
+
+.product-card {
+    transition: transform 0.2s ease-in-out;
+    border: 1px solid #eee;
+}
+
+.product-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.product-card .card-img-top {
+    height: 200px;
+    object-fit: cover;
+    border-bottom: 1px solid #eee;
+}
+
+.product-card .badge {
+    font-weight: 500;
+    padding: 0.5em 0.75em;
+}

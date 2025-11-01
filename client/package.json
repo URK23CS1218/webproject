@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "start": "vite preview --port 3000 --host",
     "render-build": "npm run build"
-  },
+  }
+}
   "dependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

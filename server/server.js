@@ -43,7 +43,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://agrolink-client.onrender.com',
+    'https://client.onrender.com',
     process.env.CLIENT_URL
   ].filter(Boolean),
   credentials: true

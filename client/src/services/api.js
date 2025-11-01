@@ -8,7 +8,7 @@ const getApiBaseURL = () => {
   
   // In production on Render
   if (import.meta.env.MODE === 'production') {
-    return 'https://agrolink-server.onrender.com';
+    return 'https://server.onrender.com';
   }
   
   // Development

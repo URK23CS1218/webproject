@@ -4,10 +4,130 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/agro-link-logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agro-Link</title>
+    <meta name="description" content="Agro-Link - Connect with local farmers and buy fresh farm products directly. Fresh vegetables, fruits, and organic produce delivered to your doorstep." />
+    <meta name="keywords" content="farm products, fresh vegetables, organic food, local farmers, agro-link, farm to table" />
+    <meta name="author" content="Agro-Link Team" />
+    
+    <!-- Preload critical resources -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Bootstrap 5 CSS with Fallback -->
+    <link 
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" 
+      rel="stylesheet" 
+      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" 
+      crossorigin="anonymous"
+      onerror="this.onerror=null;this.href='/css/bootstrap.min.css';"
+    />
+    
+    <!-- Bootstrap Icons -->
+    <link 
+      rel="stylesheet" 
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css"
+      onerror="this.onerror=null;this.href='/css/bootstrap-icons.css';"
+    />
+    
+    <!-- Google Fonts with Fallback -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom Styles -->
+    <style>
+      /* Fallback font if Google Fonts fails to load */
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+      
+      /* Loading state */
+      #root:empty::before {
+        content: '';
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #2e7d32;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: translate(-50%, -50%) rotate(0deg); }
+        100% { transform: translate(-50%, -50%) rotate(360deg); }
+      }
+      
+      /* Agro-Link Brand Colors */
+      :root {
+        --agro-primary: #2e7d32;
+        --agro-primary-dark: #1b5e20;
+        --agro-primary-light: #4caf50;
+        --agro-secondary: #ff9800;
+        --agro-success: #388e3c;
+        --agro-warning: #f57c00;
+        --agro-danger: #d32f2f;
+        --agro-text: #2e3716;
+        --agro-text-light: #666666;
+        --agro-bg: #f8f9fa;
+      }
+      
+      .btn-agro-primary {
+        background-color: var(--agro-primary);
+        border-color: var(--agro-primary);
+        color: white;
+      }
+      
+      .btn-agro-primary:hover {
+        background-color: var(--agro-primary-dark);
+        border-color: var(--agro-primary-dark);
+        color: white;
+      }
+      
+      .text-agro-primary {
+        color: var(--agro-primary) !important;
+      }
+      
+      .bg-agro-primary {
+        background-color: var(--agro-primary) !important;
+      }
+    </style>
+    
+    <title>Agro-Link - Fresh Farm Products | Connect with Local Farmers</title>
   </head>
   <body>
+    <!-- No Script Fallback -->
+    <noscript>
+      <div class="container mt-5">
+        <div class="alert alert-warning text-center">
+          <h4>JavaScript Required</h4>
+          <p>Agro-Link requires JavaScript to function properly. Please enable JavaScript in your browser settings.</p>
+        </div>
+      </div>
+    </noscript>
+    
     <div id="root"></div>
+    
+    <!-- Bootstrap 5 JS Bundle -->
+    <script 
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" 
+      integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" 
+      crossorigin="anonymous"
+    ></script>
+    
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Simple analytics (optional) -->
+    <script>
+      // Basic page load tracking
+      window.addEventListener('load', function() {
+        console.log('Agro-Link loaded successfully');
+      });
+    </script>
   </body>
 </html>

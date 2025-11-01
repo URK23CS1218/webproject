@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
+const fs = require('fs');
 
 const app = express();
 
@@ -13,7 +14,6 @@ const connectDB = async () => {
     
     console.log('🔗 Connecting to MongoDB...');
     
-    // MongoDB connection options for Render
     const options = {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
@@ -23,12 +23,11 @@ const connectDB = async () => {
     };
 
     await mongoose.connect(MONGODB_URI, options);
-    console.log('✅ Connected to MongoDB successfully!');
+    console.log('✅ MongoDB Connected Successfully');
     return true;
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
-    console.log('💡 Tip: Make sure to whitelist all IPs (0.0.0.0/0) in MongoDB Atlas');
-    console.log('🔗 Network Access: https://cloud.mongodb.com → Security → Network Access');
+    console.log('💡 Make sure to whitelist all IPs (0.0.0.0/0) in MongoDB Atlas');
     return false;
   }
 };
@@ -37,17 +36,14 @@ const connectDB = async () => {
 let dbConnected = false;
 connectDB().then(connected => {
   dbConnected = connected;
-  if (!connected) {
-    console.log('⚠️ Running in demo mode without database');
-  }
 });
 
-// Middleware
+// Middleware - Updated CORS for Render
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://localhost:5173',
-    'https://agrolink-frontend.onrender.com',
+    'https://agrolink-client.onrender.com',
     process.env.CLIENT_URL
   ].filter(Boolean),
   credentials: true
@@ -56,40 +52,19 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Create uploads directory if it doesn't exist
-const fs = require('fs');
+// Create uploads directory
 const uploadsDir = path.join(__dirname, 'uploads', 'products');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Serve uploaded product images statically
+// Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Database status middleware
 app.use((req, res, next) => {
   req.dbConnected = dbConnected;
   next();
-});
-
-// Test route
-app.get('/', (req, res) => {
-  res.json({ 
-    message: '🚀 Agro-Link Server is running!',
-    database: req.dbConnected ? 'Connected ✅' : 'Demo Mode ⚠️',
-    environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Test API
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: "Hello from Agro-Link API!",
-    database: req.dbConnected ? 'Connected' : 'Demo Mode',
-    status: "Server is running successfully",
-    timestamp: new Date().toISOString()
-  });
 });
 
 // Demo data for fallback
@@ -103,13 +78,7 @@ const demoProducts = [
     measuringUnit: 'kg',
     minOrderQty: 1,
     quantityAvailable: 50,
-    shelfLifeDays: 7,
-    deliveryRadiusKm: 20,
-    farmer: {
-      _id: 'demo-farmer-1',
-      name: 'Demo Farmer',
-      email: 'farmer@demo.com'
-    },
+    farmer: { name: 'Demo Farmer', email: 'farmer@demo.com' },
     images: []
   },
   {
@@ -121,13 +90,7 @@ const demoProducts = [
     measuringUnit: 'kg',
     minOrderQty: 1,
     quantityAvailable: 30,
-    shelfLifeDays: 7,
-    deliveryRadiusKm: 20,
-    farmer: {
-      _id: 'demo-farmer-1',
-      name: 'Demo Farmer',
-      email: 'farmer@demo.com'
-    },
+    farmer: { name: 'Demo Farmer', email: 'farmer@demo.com' },
     images: []
   },
   {
@@ -139,13 +102,7 @@ const demoProducts = [
     measuringUnit: 'kg',
     minOrderQty: 1,
     quantityAvailable: 25,
-    shelfLifeDays: 5,
-    deliveryRadiusKm: 20,
-    farmer: {
-      _id: 'demo-farmer-1',
-      name: 'Demo Farmer',
-      email: 'farmer@demo.com'
-    },
+    farmer: { name: 'Demo Farmer', email: 'farmer@demo.com' },
     images: []
   }
 ];
@@ -159,11 +116,30 @@ const demoUser = {
   address: '123 Demo Street, Demo City'
 };
 
+// Routes
+app.get('/', (req, res) => {
+  res.json({ 
+    message: '🚀 Agro-Link Server API is running!',
+    database: req.dbConnected ? 'Connected ✅' : 'Demo Mode ⚠️',
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    server: 'Agro-Link Server',
+    database: req.dbConnected ? 'Connected' : 'Demo Mode',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
 // AUTH ROUTES with fallback
 app.post('/api/auth/signup', async (req, res) => {
   try {
     if (!req.dbConnected) {
-      // Fallback for demo mode
       return res.json({
         message: 'Signup successful! (Demo Mode)',
         token: `demo-token-${Date.now()}`,
@@ -181,7 +157,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const { name, email, password, role, phone, address } = req.body;
     console.log('✅ Signup attempt:', { name, email, role });
 
-    // Check if user already exists
+    const User = require('./models/User.model');
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ 
@@ -189,7 +165,6 @@ app.post('/api/auth/signup', async (req, res) => {
       });
     }
 
-    // Create new user
     const user = new User({
       name,
       email,
@@ -227,7 +202,6 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     if (!req.dbConnected) {
-      // Fallback for demo mode
       return res.json({
         message: 'Login successful! (Demo Mode)',
         token: `demo-token-${Date.now()}`,
@@ -238,6 +212,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     console.log('✅ Login attempt:', { email });
     
+    const User = require('./models/User.model');
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ 
@@ -284,7 +259,6 @@ app.post('/api/auth/logout', (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   try {
     if (!req.dbConnected) {
-      // Fallback for demo mode
       return res.json({ user: demoUser });
     }
 
@@ -296,11 +270,13 @@ app.get('/api/auth/me', async (req, res) => {
       const parts = token.split('-');
       const possibleId = parts[2];
       if (possibleId) {
+        const User = require('./models/User.model');
         const userById = await User.findById(possibleId).select('-passwordHash');
         if (userById) return res.json({ user: userById });
       }
     }
 
+    const User = require('./models/User.model');
     const user = await User.findOne().select('-passwordHash');
     if (!user) {
       return res.json({ user: demoUser });
@@ -317,7 +293,6 @@ app.get('/api/auth/me', async (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     if (!req.dbConnected) {
-      // Fallback for demo mode
       return res.json({
         products: demoProducts,
         totalPages: 1,
@@ -328,6 +303,7 @@ app.get('/api/products', async (req, res) => {
     }
 
     console.log('📦 Fetching all products');
+    const Product = require('./models/Product.model');
     const products = await Product.find().populate('farmer', 'name email');
     
     res.json({
@@ -352,6 +328,9 @@ app.post('/api/products', async (req, res) => {
     }
 
     console.log('📦 Creating product:', req.body);
+    
+    const User = require('./models/User.model');
+    const Product = require('./models/Product.model');
     
     const farmerUser = await User.findOne({ role: 'farmer' });
     const farmerId = farmerUser ? farmerUser._id : '65a1b2c3d4e5f6a7b8c9d0e1';
@@ -400,6 +379,9 @@ app.get('/api/products/farmer/my-products', async (req, res) => {
     }
 
     console.log('👨‍🌾 Fetching farmer products');
+    const User = require('./models/User.model');
+    const Product = require('./models/Product.model');
+    
     const farmerUser = await User.findOne({ role: 'farmer' });
     const farmerId = farmerUser ? farmerUser._id : '65a1b2c3d4e5f6a7b8c9d0e1';
 
@@ -418,6 +400,7 @@ app.delete('/api/products/:id', async (req, res) => {
     }
 
     console.log('🗑️ Deleting product:', req.params.id);
+    const Product = require('./models/Product.model');
     await Product.findByIdAndDelete(req.params.id);
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
@@ -426,61 +409,73 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// ORDER ROUTES with fallback
-const orderRoutes = require('./routes/orders.routes');
-app.use('/api/orders', (req, res, next) => {
-  if (!req.dbConnected) {
-    return res.status(503).json({ 
-      message: 'Database unavailable - order functionality disabled',
-      demo: true
-    });
-  }
-  next();
-}, orderRoutes);
+// ORDER ROUTES
+app.get('/api/orders/my-orders', (req, res) => {
+  const demoOrders = [
+    {
+      _id: 'order-1',
+      orderNumber: 'ORD-2024-001',
+      status: 'delivered',
+      totalAmount: 140,
+      createdAt: '2024-01-10T00:00:00Z',
+      items: [
+        { product: { title: 'Organic Tomatoes' }, quantity: 2, price: 80 },
+        { product: { title: 'Fresh Carrots' }, quantity: 1, price: 60 }
+      ],
+      trackingNumber: 'TRK123456',
+      trackingHistory: [
+        {
+          timestamp: '2024-01-10T13:30:00Z',
+          description: 'Order confirmed',
+          location: 'Farm Warehouse'
+        },
+        {
+          timestamp: '2024-01-11T16:00:00Z',
+          description: 'Shipped',
+          location: 'Distribution Center'
+        },
+        {
+          timestamp: '2024-01-12T19:45:00Z',
+          description: 'Delivered',
+          location: 'Your Address'
+        }
+      ]
+    }
+  ];
 
-// Health check
-app.get('/api/health', (req, res) => {
   res.json({
-    status: 'OK',
-    server: 'Agro-Link API',
-    database: req.dbConnected ? 'Connected' : 'Demo Mode',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    success: true,
+    orders: demoOrders
   });
 });
 
-// Simple weather API
+// Weather API
 app.get('/api/utils/weather', (req, res) => {
   res.json({
-    location: "Demo Location",
+    location: "Farm Location",
     temperature: 25,
     description: "Sunny",
     humidity: 65,
     windSpeed: 12,
-    icon: "☀️",
-    message: "Weather API is working"
+    icon: "☀️"
   });
 });
 
-// 404 handler
-app.use((req, res, next) => {
+// 404 Handler
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Route not found',
-    path: req.originalUrl,
-    method: req.method,
-    database: req.dbConnected ? 'Connected' : 'Demo Mode'
+    path: req.originalUrl
   });
 });
 
-// Error handler
+// Error Handler
 app.use((err, req, res, next) => {
-  console.error('💥 Server error:', err);
+  console.error('Server error:', err);
   res.status(500).json({
     success: false,
-    message: 'Internal server error',
-    database: req.dbConnected ? 'Connected' : 'Demo Mode',
-    error: process.env.NODE_ENV === 'production' ? {} : err.message
+    message: 'Internal server error'
   });
 });
 
@@ -488,7 +483,6 @@ const PORT = process.env.PORT || 7000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🌐 CORS enabled for all origins`);
   console.log(`💾 Database: ${dbConnected ? 'CONNECTED ✅' : 'DEMO MODE ⚠️'}`);
-  console.log(`🔗 MongoDB URI: ${process.env.MONGODB_URI ? 'Set' : 'Not set'}`);
+  console.log(`🌐 CORS enabled for: ${process.env.CLIENT_URL || 'https://agrolink-client.onrender.com'}`);
 });
